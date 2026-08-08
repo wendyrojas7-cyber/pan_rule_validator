@@ -1,0 +1,22 @@
+# Copy to config.yaml and fill in for your environment.
+# Do NOT commit config.yaml with a real api_key/password to source control.
+
+panorama_host: panorama.internal.example.com
+
+# Preferred: paste a key already generated and stored in your secrets
+# manager (Azure Key Vault, etc.) at deploy time -- don't hardcode it here
+# in a file that gets committed.
+api_key: ""
+
+# Fallback only: a read-only service account. If api_key is blank, the
+# collector will call type=keygen once using these and cache the result
+# for the run. Still shouldn't be committed in plaintext -- inject via
+# environment/secret store in real deployments.
+username: ""
+password: ""
+
+verify_ssl: true
+
+device_groups:
+  - DG-Edge-Firewalls
+  - DG-DataCenter
