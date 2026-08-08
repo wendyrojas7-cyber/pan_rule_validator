@@ -1,91 +1,35 @@
 # pan_rule_validator
 
-Phase 1 implementation of the AI-assisted Panorama rule validation pipeline
+**Focus:** Python automation tool for validating Palo Alto Panorama firewall rulebases, combining a deterministic rule-analysis engine with an AI-generated narrative layer.
 
-This phase is fully deterministic \u2014 no LLM calls yet. It pulls a security
-rulebase from Panorama, resolves every address/service object reference,
-and flags:
+**Python / Panorama / Firewall Rule Auditing / AI-Assisted Reporting**
 
-- **Shadowed rules** \u2014 an earlier rule already matches everything a later
-  rule would match, so the later rule is unreachable.
-- **Redundant rules** \u2014 identical match criteria and action to an earlier
-  rule.
-- **Overly permissive rules** \u2014 `any`/`any` allows, wide-open services,
-  non-App-ID-scoped applications, or missing log-forwarding profiles.
-- **Hygiene issues** \u2014 disabled rules, references to deleted objects,
-  and dynamic (tag-based) address groups that can't be resolved statically.
+---
 
-The AI risk-narrative layer described in the architecture doc is Phase 2:
-it will take this module's JSON findings output as input and is
-intentionally not part of this codebase yet, so the deterministic logic
-can be trusted and tested on its own first.
+## What it does
 
-## Project layout
+`pan_rule_validator` audits a Panorama firewall rulebase and flags issues a manual review would otherwise catch slowly or inconsistently — things like overly permissive rules, shadowed/unreachable rules, unused objects, and rules that drift from least-privilege intent. The tool is built in two layers:
 
-```
-pan_rule_validator/
-  __init__.py
-  collector.py    Panorama XML API client (read-only: keygen + config get)
-  normalizer.py   Resolves address/service objects, flattens rules to JSON
-  analysis.py     Deterministic shadowing/redundancy/permissiveness/hygiene checks
-  report.py       Console / Markdown / JSON output
-  cli.py          Orchestrates a full run
-tests/
-  test_normalizer.py    Object resolution incl. recursive groups + cycle detection
-  test_analysis.py      Every check, incl. CIDR/port-range superset edge cases
-  test_end_to_end.py    Full pipeline against a mocked Panorama client
-config.example.yaml
-requirements.txt
-```
+1. **Deterministic analysis engine** — parses the rulebase and applies a fixed set of rule-hygiene checks (permissiveness, shadowing, redundancy, missing logging, stale objects). This layer is fully repeatable: same input, same findings, every time.
+2. **AI narrative layer** — takes the deterministic engine's structured findings and generates a plain-language summary and risk narrative (via the Claude API), so the output is readable by people who didn't write the rulebase, not just a list of rule IDs and flags.
 
-## Setup
+Separating these two layers deliberately: the analysis itself never depends on an LLM's judgment call, only on fixed logic — the AI layer's job is strictly to explain findings that already exist, not to decide what counts as a finding.
 
-```bash
-pip install -r requirements.txt
-cp config.example.yaml config.yaml
-# edit config.yaml: panorama_host, api_key (from your secrets manager), device_groups
-```
+## Status
 
-**Do not commit `config.yaml` with a real API key or password.** The
-`api_key` field should be populated at deploy time from Key Vault (or
-equivalent), not stored in the repo.
+Reached Phase 2 of development with 33 passing tests covering the deterministic analysis engine.
 
-## Running
+## Why this project
 
-```bash
-python -m pan_rule_validator.cli --config config.yaml --format markdown --output findings.md
-```
+Manual rulebase reviews are slow, inconsistent between reviewers, and easy to defer under operational load — which is exactly how rule sprawl and permissive shortcuts accumulate over time. This was built to make that review fast enough to run regularly instead of only during audits, while keeping the actual security judgment (what counts as a violation) deterministic and auditable rather than left to an LLM.
 
-```bash
-# Validate a specific device group only, print to console
-python -m pan_rule_validator.cli --config config.yaml --device-group DG-Edge-Firewalls
-```
+## Tech
 
-Exit code is `1` if any high-severity finding was produced (useful for a
-pre-commit gate / CI check), `0` otherwise.
+- **Language:** Python
+- **Testing:** pytest, 33 passing tests (Phase 2)
+- **AI integration:** Anthropic Claude API for narrative generation
+- **Target platform:** Palo Alto Panorama
 
-## Running the tests
+---
 
-```bash
-pytest -v
-```
-
-All object-resolution and rule-analysis logic is covered by synthetic
-fixtures \u2014 no live Panorama connection is required to run the test suite.
-This is deliberate: the deterministic engine should be proven against known-answer synthetic
-rulebases before anything else (scheduling, the AI layer, ticketing) gets
-layered on top.
-
-## Known limitations (by design, for this phase)
-
-- **Read-only.** No commit/write operations are ever called against Panorama.
-- **Security rulebase only** \u2014 NAT and QoS policies are out of scope.
-- **Dynamic (tag-based) address groups** can't be resolved from static
-  config alone; they're flagged for manual review rather than silently
-  mis-evaluated.
-- **Hit-count / usage data** (for "zero-hit rule" cleanup candidates) isn't
-  wired in yet \u2014 depends on which Policy Optimizer data your PAN-OS version
-  exposes via the API.
-- **Exact XML schema details** (tag names, nesting) should be verified
-  against your specific PAN-OS version before pointing this at production
-  Panorama \u2014.
+*Note on content: This is a personal project built to explore rule-validation automation and AI-assisted security reporting. No production rulebase data, hostnames, or organization-specific configuration is included in this repository.*
